@@ -1,0 +1,11 @@
+[package]
+edition = "2018"
+name = "http-bench"
+version = "0.1.0"
+authors = ["Florian Reisecker <florian.reisecker@gmail.com>"]
+
+[dependencies]
+hyper = "0.12"
+hyper-tls = "0.3.0"
+tokio = "0.1"
+http = "0.1"
