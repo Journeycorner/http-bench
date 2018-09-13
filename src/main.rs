@@ -12,7 +12,7 @@ use tokio::runtime::Runtime;
 fn main() {
     match parse_input_arguments() {
         None => println!("Usage: http-bench 3 https://some-2-example-12-url.com"),
-        Some(arguments) => run(arguments.uri, arguments.number_of_requests),
+        Some(arguments) => run(&arguments.uri, arguments.number_of_requests),
     };
 }
 
@@ -48,27 +48,19 @@ fn parse_input_arguments() -> Option<Arguments> {
     Some(arguments)
 }
 
-fn run(uri: Uri, number_of_requests: usize) {
+fn run(uri: &Uri, number_of_requests: usize) {
     let https = HttpsConnector::new(4).expect("TLS initialization failed");
     let client = Client::builder().build::<_, hyper::Body>(https);
     // create a new reactor event loop
     let mut rt = Runtime::new().unwrap();
     let (sender, receiver) = mpsc::channel();
     for i in 1..=number_of_requests {
-        //let future = create_request(i, &client, uri.clone());
-        create_request(sender.clone(), &mut rt, i, &client, uri.clone());
+        create_request(sender.clone(), &mut rt, i, &client, uri);
     }
-    let mut values: Vec<Duration> = Vec::with_capacity(number_of_requests);
-    let mut iter = receiver.try_iter();
 
-    loop {
-        let value = iter.next();
-        if value.is_none() {
-            break;
-        }
-        values.push(value.unwrap());
-    }
-    let statistic = Statistic::new(values, number_of_requests);
+    let mut telemetry: Vec<Duration> = receiver.try_iter().collect();
+
+    let statistic = Statistic::new(&mut telemetry, number_of_requests);
     println!("{:?}", statistic);
 }
 
@@ -77,7 +69,7 @@ fn create_request(
     runtime: &mut Runtime,
     i: usize,
     client: &Client<HttpsConnector<HttpConnector>>,
-    uri: Uri,
+    uri: &Uri,
 ) {
     let start = Instant::now();
     let future = client
@@ -85,7 +77,7 @@ fn create_request(
         .map(move |res| {
             let elapsed = start.elapsed();
             sender.send(elapsed).unwrap();
-            println!("Request took {:?}", elapsed);
+            println!("{}. request took {:?}", i, elapsed);
             println!("Response: {}\n", res.status());
         }).map_err(|err| {
             println!("Error: {}\n", err);
@@ -100,14 +92,14 @@ struct Statistic {
 }
 
 impl Statistic {
-    fn new(values: Vec<Duration>, number_of_requests: usize) -> Statistic {
+    fn new(values: &mut Vec<Duration>, number_of_requests: usize) -> Self {
+        values.sort();
         let sum: Duration = values.iter().sum();
         let average = sum / number_of_requests as u32;
-        let mut values = values;
-        values.sort();
         let middle = values.len() / 2;
-        let median = *values.iter().nth(middle).unwrap();
-        Statistic { average, median }
+        let median = values[middle];
+
+        Self { average, median }
     }
 }
 
