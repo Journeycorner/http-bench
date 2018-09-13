@@ -2,7 +2,7 @@ use http::Uri;
 use hyper::client::HttpConnector;
 use hyper::rt::Future;
 use hyper::Client;
-use hyper_tls::HttpsConnector;
+use hyper_rustls::HttpsConnector;
 use std::env;
 use std::sync::mpsc;
 use std::sync::mpsc::Sender;
@@ -49,7 +49,7 @@ fn parse_input_arguments() -> Option<Arguments> {
 }
 
 fn run(uri: &Uri, number_of_requests: usize) {
-    let https = HttpsConnector::new(4).expect("TLS initialization failed");
+    let https = HttpsConnector::new(4);
     let client = Client::builder().build::<_, hyper::Body>(https);
     // create a new reactor event loop
     let mut rt = Runtime::new().unwrap();
