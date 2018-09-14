@@ -7,7 +7,7 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
 use tokio::prelude::Future;
 
-pub fn run(uri: &Uri, number_of_requests: usize) {
+pub fn run(uri: &Uri, number_of_requests: usize) -> Statistic {
     let https = HttpsConnector::new(4);
     let client = Client::builder().build::<_, hyper::Body>(https);
     // create a new reactor event loop
@@ -17,8 +17,7 @@ pub fn run(uri: &Uri, number_of_requests: usize) {
     }
 
     let mut telemetry: Vec<Duration> = receiver.try_iter().collect();
-    let statistic = Statistic::new(&mut telemetry, number_of_requests);
-    println!("{:?}", statistic);
+    Statistic::new(&mut telemetry, number_of_requests)
 }
 
 fn create_request(
@@ -43,7 +42,7 @@ fn create_request(
 }
 
 #[derive(Debug)]
-struct Statistic {
+pub struct Statistic {
     average: Duration,
     median: Duration,
 }

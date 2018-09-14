@@ -7,7 +7,8 @@ fn main() {
     match parse_input_arguments() {
         Ok(result) => {
             if let Some(arguments) = result {
-                runtime::run(&arguments.uri, arguments.number_of_requests);
+                let statistic = runtime::run(&arguments.uri, arguments.number_of_requests);
+                println!("{:?}", statistic);
             } else {
                 println!("Usage: http-bench 3 https://some-2-example-12-url.com");
             }
