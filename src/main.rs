@@ -1,72 +1,85 @@
 use http::Uri;
 use hyper::client::HttpConnector;
-use hyper::rt::Future;
 use hyper::Client;
 use hyper_rustls::HttpsConnector;
 use std::env;
+use std::result::Result::{self, Err, Ok};
 use std::sync::mpsc;
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant};
-use tokio::runtime::Runtime;
+use tokio::prelude::*;
 
 fn main() {
     match parse_input_arguments() {
-        None => println!("Usage: http-bench 3 https://some-2-example-12-url.com"),
-        Some(arguments) => run(&arguments.uri, arguments.number_of_requests),
-    };
+        Ok(result) => {
+            if let Some(arguments) = result {
+                run(&arguments.uri, arguments.number_of_requests);
+            } else {
+                println!("Usage: http-bench 3 https://some-2-example-12-url.com");
+            }
+        }
+        Err(message) => eprintln!("{}", message),
+    }
 }
 
-fn parse_input_arguments() -> Option<Arguments> {
-    // skip parsing if usage mode
-    if env::args().nth(1).unwrap() == "usage" {
-        return None;
+fn parse_input_arguments() -> Result<Option<Arguments>, String> {
+    let raw_arguments: Vec<String> = env::args().skip(1).collect();
+
+    if raw_arguments.len() == 1 && raw_arguments[0] == "usage" {
+        // skip parsing if usage mode
+        return Ok(None);
+    } else if raw_arguments.len() != 2 {
+        // check input argument count
+        return Err(String::from(
+            "Needs exactly two input arguments. Type usage for more information.",
+        ));
     }
-    // check input argument count
-    if env::args().len() != 3 {
-        panic!("Needs exactly two input arguments. Type usage for more information.");
-    }
+
     // parse request repeat count
-    let number_of_requests: usize = env::args()
-        .nth(1)
-        .expect("Can't access input param, that's a bug!")
-        .parse()
-        .expect("Input value is not a valid number!");
-    if number_of_requests < 1 || number_of_requests > 10 {
-        panic!("Request repeat count must be between 1 and 10");
-    }
+    let number_of_requests = if let Ok(value) = raw_arguments[0].parse::<usize>() {
+        if value < 1 || value > 10 {
+            Err(String::from(
+                "Request repeat count must be between 1 and 10",
+            ))
+        } else {
+            Ok(value)
+        }
+    } else {
+        Err(format!("{} is not a number", raw_arguments[0]))
+    }?;
+
     // parse uri
-    let uri: Uri = env::args()
-        .nth(2)
-        .expect("Can't access input param, that's a bug!")
-        .parse()
-        .expect("Not a valid Uri");
+    let uri = match raw_arguments[1].parse::<Uri>() {
+        Ok(value) => Ok(value),
+        Err(_err) => Err(format!("{} is not a valid uri", raw_arguments[1])),
+    }?;
+    if uri.scheme_part().is_none() {
+        return Err(format!("{} needs to be an absolute uri", raw_arguments[1]));
+    }
 
     let arguments = Arguments {
         number_of_requests,
         uri,
     };
-    Some(arguments)
+    Ok(Some(arguments))
 }
 
 fn run(uri: &Uri, number_of_requests: usize) {
     let https = HttpsConnector::new(4);
     let client = Client::builder().build::<_, hyper::Body>(https);
     // create a new reactor event loop
-    let mut rt = Runtime::new().unwrap();
     let (sender, receiver) = mpsc::channel();
     for i in 1..=number_of_requests {
-        create_request(sender.clone(), &mut rt, i, &client, uri);
+        create_request(sender.clone(), i, &client, uri);
     }
 
     let mut telemetry: Vec<Duration> = receiver.try_iter().collect();
-
     let statistic = Statistic::new(&mut telemetry, number_of_requests);
     println!("{:?}", statistic);
 }
 
 fn create_request(
     sender: Sender<Duration>,
-    runtime: &mut Runtime,
     i: usize,
     client: &Client<HttpsConnector<HttpConnector>>,
     uri: &Uri,
@@ -82,7 +95,8 @@ fn create_request(
         }).map_err(|err| {
             println!("Error: {}\n", err);
         });
-    let _result = runtime.block_on(future);
+
+    tokio::run(future);
 }
 
 #[derive(Debug)]
